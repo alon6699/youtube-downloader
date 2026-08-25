@@ -3,8 +3,5 @@ services:
     name: youtube-to-mp3-pwa
     env: node
     plan: free
-    buildCommand: npm install --cache /tmp/npm-cache && npm run build
+    buildCommand: npm install && npm run build
     startCommand: npm start
-    envVars:
-      - key: NODE_ENV
-        value: production
