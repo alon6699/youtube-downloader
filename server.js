@@ -41,11 +41,11 @@ function getCleanUrl(inputUrl) {
   return match ? `https://www.youtube.com/watch?v=${match[1]}` : inputUrl.split('&')[0];
 }
 
-// Helper to get base yt-dlp arguments (includes iOS/Android/mweb clients to bypass cloud 429 bot checks)
+// Helper to get base yt-dlp arguments (using tv and web_embedded clients to bypass datacenter 429 blocks)
 function getBaseYtdlpArgs() {
   const args = [
     '--js-runtimes', 'node',
-    '--extractor-args', 'youtube:player_client=ios,android,mweb',
+    '--extractor-args', 'youtube:player_client=tv,web_embedded',
   ];
 
   if (process.env.YOUTUBE_COOKIES) {
@@ -70,6 +70,27 @@ app.get('/api/info', async (req, res) => {
     }
 
     const cleanUrl = getCleanUrl(url);
+
+    // Try fast oEmbed API first (immune to rate limits / datacenter IP blocks)
+    try {
+      const oembedRes = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(cleanUrl)}&format=json`);
+      if (oembedRes.ok) {
+        const oembedData = await oembedRes.json();
+        const videoIdMatch = cleanUrl.match(/(?:v=|\/v\/|youtu\.be\/|embed\/|shorts\/)([a-zA-Z0-9_-]{11})/);
+        const videoId = videoIdMatch ? videoIdMatch[1] : '';
+
+        return res.json({
+          title: oembedData.title,
+          author: oembedData.author_name || 'Unknown Artist',
+          duration: 0,
+          thumbnail: oembedData.thumbnail_url || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : ''),
+        });
+      }
+    } catch (oembedErr) {
+      console.warn('oEmbed lookup failed, falling back to yt-dlp:', oembedErr.message);
+    }
+
+    // Fallback to yt-dlp
     const rawJson = await ytDlp.execPromise([cleanUrl, ...getBaseYtdlpArgs(), '--dump-json']);
     const info = JSON.parse(rawJson);
 
