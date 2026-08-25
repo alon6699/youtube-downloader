@@ -75,22 +75,47 @@ export default function App() {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!url) return;
     setDownloading(true);
-    
-    // Create direct download link
-    const downloadUrl = `/api/download?url=${encodeURIComponent(url.trim())}`;
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = '';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    setError('');
 
-    setTimeout(() => {
+    try {
+      const downloadUrl = `/api/download?url=${encodeURIComponent(url.trim())}`;
+      const response = await fetch(downloadUrl);
+
+      if (!response.ok) {
+        let errorMsg = 'Failed to download MP3.';
+        try {
+          const data = await response.json();
+          errorMsg = data.error || errorMsg;
+        } catch {}
+        throw new Error(errorMsg);
+      }
+
+      const disposition = response.headers.get('Content-Disposition');
+      let filename = info?.title ? `${info.title}.mp3` : 'audio.mp3';
+      if (disposition && disposition.includes('filename=')) {
+        const matches = /filename="?([^";]+)"?/.exec(disposition);
+        if (matches && matches[1]) {
+          filename = matches[1];
+        }
+      }
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      setError(err.message || 'Download failed');
+    } finally {
       setDownloading(false);
-    }, 3000);
+    }
   };
 
   const formatDuration = (seconds) => {

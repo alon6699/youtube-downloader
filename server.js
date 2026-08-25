@@ -116,9 +116,16 @@ app.get('/api/download', async (req, res) => {
     }
 
     const cleanUrl = getCleanUrl(url);
-    const rawJson = await ytDlp.execPromise([cleanUrl, ...getBaseYtdlpArgs(), '--dump-json']);
-    const info = JSON.parse(rawJson);
-    const title = sanitizeFilename(info.title);
+
+    // Get title via oEmbed first (fast & reliable, no extra yt-dlp call)
+    let title = 'audio';
+    try {
+      const oembedRes = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(cleanUrl)}&format=json`);
+      if (oembedRes.ok) {
+        const oembedData = await oembedRes.json();
+        title = sanitizeFilename(oembedData.title);
+      }
+    } catch {}
 
     tempFilePath = path.join(os.tmpdir(), `yt_mp3_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.mp3`);
 
