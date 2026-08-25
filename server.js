@@ -41,6 +41,26 @@ function getCleanUrl(inputUrl) {
   return match ? `https://www.youtube.com/watch?v=${match[1]}` : inputUrl.split('&')[0];
 }
 
+// Helper to get base yt-dlp arguments (includes iOS/Android/mweb clients to bypass cloud 429 bot checks)
+function getBaseYtdlpArgs() {
+  const args = [
+    '--js-runtimes', 'node',
+    '--extractor-args', 'youtube:player_client=ios,android,mweb',
+  ];
+
+  if (process.env.YOUTUBE_COOKIES) {
+    const cookiesPath = path.join(os.tmpdir(), 'yt_cookies.txt');
+    try {
+      fs.writeFileSync(cookiesPath, process.env.YOUTUBE_COOKIES);
+      args.push('--cookies', cookiesPath);
+    } catch (e) {
+      console.error('Failed to write cookies file:', e);
+    }
+  }
+
+  return args;
+}
+
 // Get video metadata
 app.get('/api/info', async (req, res) => {
   try {
@@ -50,7 +70,7 @@ app.get('/api/info', async (req, res) => {
     }
 
     const cleanUrl = getCleanUrl(url);
-    const rawJson = await ytDlp.execPromise([cleanUrl, '--js-runtimes', 'node', '--dump-json']);
+    const rawJson = await ytDlp.execPromise([cleanUrl, ...getBaseYtdlpArgs(), '--dump-json']);
     const info = JSON.parse(rawJson);
 
     res.json({
@@ -75,7 +95,7 @@ app.get('/api/download', async (req, res) => {
     }
 
     const cleanUrl = getCleanUrl(url);
-    const rawJson = await ytDlp.execPromise([cleanUrl, '--js-runtimes', 'node', '--dump-json']);
+    const rawJson = await ytDlp.execPromise([cleanUrl, ...getBaseYtdlpArgs(), '--dump-json']);
     const info = JSON.parse(rawJson);
     const title = sanitizeFilename(info.title);
 
@@ -83,7 +103,7 @@ app.get('/api/download', async (req, res) => {
 
     await ytDlp.execPromise([
       cleanUrl,
-      '--js-runtimes', 'node',
+      ...getBaseYtdlpArgs(),
       '-x',
       '--audio-format', 'mp3',
       '--audio-quality', '0',
